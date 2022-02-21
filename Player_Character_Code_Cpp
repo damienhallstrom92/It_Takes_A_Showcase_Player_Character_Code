@@ -1,0 +1,299 @@
+#include "playercharacter.h"
+
+//player character setup
+
+Aplayercharacter::Aplayercharacter()
+{
+	PrimaryActorTick.bCanEverTick = false;
+
+	//player camera setup
+	springarm = CreateDefaultSubobject<USpringArmComponent>(TEXT("springarm"));
+	springarm->SetupAttachment(GetMesh());
+	playercamera = CreateDefaultSubobject<UCameraComponent>(TEXT("playercamera"));
+	playercamera->SetupAttachment(springarm);
+}
+
+//begin play function
+
+void Aplayercharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	//set default movement speed
+	GetCharacterMovement()->MaxWalkSpeed = defaultmovementspeed;
+
+	//montage setup to player character skeletal mesh
+	AnimMontage = GetMesh()->GetAnimInstance();
+
+	//call at begin play custom tick timer
+	customtick();
+}
+
+//custom tick (resets a timer every frame instead of using tick (for better performance)
+
+void Aplayercharacter::customtick()
+{
+	//interp springarm targetarmlength when player is aiming (zoom in when aiming)
+	if (isAiming == true)
+	{
+		springarm->TargetArmLength = (FMath::FInterpTo(springarm->TargetArmLength, targetlengthAimspringarmloc, 0.01f, 5.0f));
+		springarm->bEnableCameraLag = false;
+		springarm->bEnableCameraRotationLag = false;
+		springarm->SetRelativeLocation(FMath::VInterpTo(FVector(springarm->GetRelativeLocation()), FVector(vectorAimspringarmloc), 0.01f, 5.0f));
+	}
+	if (isAiming == false)
+	{
+		springarm->TargetArmLength = (FMath::FInterpTo(springarm->TargetArmLength, targetlengthDefaultspringarmloc, 0.01f, 10.0f));
+		springarm->bEnableCameraLag = true;
+		springarm->bEnableCameraRotationLag = true;
+		springarm->SetRelativeLocation(FMath::VInterpTo(FVector(springarm->GetRelativeLocation()), FVector(vectorDefaultspringarmloc), 0.01f, 10.0f));
+	}
+
+	//check if player is falling
+	if (GetCharacterMovement()->IsFalling() == false)
+	{
+		candoublejump = false;
+		jumpOnce = false;
+		isfalling = false;
+		if (rollDoOnce == false)
+		{
+			//AnimMontage->Montage_Play(landrollmontage, 1.0f);
+			rollDoOnce = true;
+		}
+	}
+	if (GetCharacterMovement()->IsFalling() == true)
+	{
+		isfalling = true;
+		rollDoOnce = false;
+	}
+
+	//camera collision detection function called
+	cameraCollisionDetection();
+
+	//reset timer every frame (customtick)
+	GetWorld()->GetTimerManager().SetTimer(customticktimer, this, &Aplayercharacter::customtick, 0.01f);
+}
+
+//increase gravity function
+
+void Aplayercharacter::increasegravity()
+{
+	GetCharacterMovement()->GravityScale = 3.75;
+}
+
+//camera interpolate when collision detected
+
+void Aplayercharacter::cameraCollisionDetection()
+{
+	isCollisionDetected = GetWorld()->SweepTestByChannel(playercamera->GetComponentLocation(), playercamera->GetComponentLocation(), 
+		FQuat::Identity, ECC_GameTraceChannel3, camSphereTrace);
+
+	if (isCollisionDetected == true)
+	{
+		springarm->TargetArmLength = (FMath::FInterpTo(springarm->TargetArmLength, 100, 0.01f, 5.0f));
+	}
+	if (isCollisionDetected == false)
+	{
+		springarm->TargetArmLength = (FMath::FInterpTo(springarm->TargetArmLength, targetlengthDefaultspringarmloc, 0.01f, 5.0f));
+	}
+}
+
+//setup of player input
+
+void Aplayercharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
+	InputComponent->BindAxis("moveforward", this, &Aplayercharacter::moveforward);
+	InputComponent->BindAxis("movebackward", this, &Aplayercharacter::movebackward);
+	InputComponent->BindAxis("moveleft", this, &Aplayercharacter::moveleft);
+	InputComponent->BindAxis("moveright", this, &Aplayercharacter::moveright);
+	InputComponent->BindAxis("lookhorizontal", this, &Aplayercharacter::lookhorizontal);
+	InputComponent->BindAxis("lookvertical", this, &Aplayercharacter::lookvertical);
+	InputComponent->BindAction("jump", IE_Pressed, this, &Aplayercharacter::onjump);
+	InputComponent->BindAction("jump", IE_Released, this, &Aplayercharacter::onjumprelease);
+	InputComponent->BindAction("jump", IE_Pressed, this, &Aplayercharacter::onDoublejump);
+	InputComponent->BindAction("shoot", IE_Pressed, this, &Aplayercharacter::shoot);
+	InputComponent->BindAction("shoot", IE_Released, this, &Aplayercharacter::stopshoot);
+	InputComponent->BindAction("aim", IE_Pressed, this, &Aplayercharacter::aim);
+	InputComponent->BindAction("aim", IE_Released, this, &Aplayercharacter::stopaim);
+	InputComponent->BindAction("sprint", IE_Pressed, this, &Aplayercharacter::sprint);
+	InputComponent->BindAction("sprint", IE_Released, this, &Aplayercharacter::stopsprint);
+}
+
+//player input movement
+
+void Aplayercharacter::moveforward(float moveF)
+{
+	AddMovementInput(GetActorForwardVector(), moveF);
+}
+void Aplayercharacter::movebackward(float moveB)
+{
+	AddMovementInput(GetActorForwardVector(), moveB);
+}
+void Aplayercharacter::moveleft(float moveL)
+{
+	AddMovementInput(GetActorRightVector(), moveL);
+}
+void Aplayercharacter::moveright(float moveR)
+{
+	AddMovementInput(GetActorRightVector(), moveR);
+}
+void Aplayercharacter::lookhorizontal(float lookH)
+{
+	AddControllerYawInput(lookH);
+}
+void Aplayercharacter::lookvertical(float lookV)
+{
+	AddControllerPitchInput(lookV);
+}
+
+//player input sprint
+
+void Aplayercharacter::sprint()
+{
+	GetCharacterMovement()->MaxWalkSpeed = sprintmovementspeed;
+}
+void Aplayercharacter::stopsprint()
+{
+	GetCharacterMovement()->MaxWalkSpeed = defaultmovementspeed;
+}
+
+//player input jump
+
+void Aplayercharacter::onjump()
+{
+	if (candoublejump == false && jumpOnce == false)
+	{
+		GetCharacterMovement()->GravityScale = 2;
+		GetCharacterMovement()->AddImpulse(FVector(0 ,0 ,90900), false);
+		AnimMontage->Montage_Play(jumpmontage, 1.0f);
+		jumpOnce = true;
+		doublejumpOnce = false;
+		isJumping();
+	}
+}
+void Aplayercharacter::onjumprelease()
+{
+	candoublejump = true;
+}
+void Aplayercharacter::onDoublejump()
+{
+	if (candoublejump == true && doublejumpOnce == false)
+	{
+		GetCharacterMovement()->GravityScale = 2;
+		GetCharacterMovement()->AddImpulse(FVector(0, 0, 220900), false);
+		AnimMontage->Montage_Play(doublejumpmontage, 1.0f);
+		candoublejump = false;
+		doublejumpOnce = true;
+		GetWorld()->GetTimerManager().SetTimer(gravitytimer, this, &Aplayercharacter::increasegravity, 0.2f);
+		isJumping();
+	}
+}
+
+//player input shoot
+
+void Aplayercharacter::shoot()
+{
+	if (stopshootTimerDoOnce == false && isAiming == true)
+	{
+		raycastshoot();
+		isShooting();
+		AnimMontage->Montage_Play(shootmontage, 1.0f);
+		isHoldingShootButton = true;
+		projectileTimerEnd();
+		GetWorld()->GetTimerManager().SetTimer(stopshootAnimtimer, this, &Aplayercharacter::stopshootTimerEnd, 0.2f);
+		stopshootTimerDoOnce = true;
+	}
+}
+void Aplayercharacter::stopshoot()
+{
+	isHoldingShootButton = false;
+	isNotShooting();
+}
+void Aplayercharacter::stopshootTimerEnd()
+{
+	if (isHoldingShootButton == true)
+	{
+		raycastshoot();
+		isShooting();
+		AnimMontage->Montage_Play(shootmontage, 1.0f);
+		GetWorld()->GetTimerManager().SetTimer(stopshootAnimtimer, this, &Aplayercharacter::stopshootTimerEnd, 0.2f);
+	}
+	else if (isHoldingShootButton == false)
+	{
+		stopshootTimerDoOnce = false;
+	}
+}
+void Aplayercharacter::projectileTimerEnd()
+{
+	if (isHoldingShootButton == true)
+	{
+		SpawnProjectile();
+		GetWorld()->GetTimerManager().SetTimer(projectileTimer, this, &Aplayercharacter::projectileTimerEnd, 0.075f);
+	}
+}
+
+//player input aim
+
+void Aplayercharacter::aim()
+{
+	isAiming = true;
+	bUseControllerRotationYaw = true;
+	isAimingEvent();
+}
+void Aplayercharacter::stopaim()
+{
+	isAiming = false;
+	bUseControllerRotationYaw = false;
+	isNotAimingEvent();
+}
+
+//raycast function
+
+void Aplayercharacter::raycastshoot()
+{
+	//raycast variables
+	FHitResult OutHitResultdestructable;
+	FHitResult OutHitResultclimbable;
+	FHitResult OutHitResultEnemy;
+	FHitResult OutHitResultRaycastBlocker;
+	FHitResult OutHitResultSpawnedIceDestructable;
+	FVector StartPosition;
+	FVector ForwardVector;
+	FVector EndPosition;
+	FCollisionQueryParams IgnoreSelf;
+	IgnoreSelf.AddIgnoredActor(this->GetOwner());
+
+	//raycast setup
+	StartPosition = playercamera->GetComponentLocation();
+	ForwardVector = playercamera->GetForwardVector();
+	EndPosition = StartPosition + (ForwardVector * shootRange);
+
+	//raycast hit setup
+	bool isHitWalldestructable = GetWorld()->LineTraceSingleByChannel(OutHitResultdestructable, StartPosition, EndPosition, ECollisionChannel::ECC_GameTraceChannel1, IgnoreSelf);
+	bool isHitWallclimbable = GetWorld()->LineTraceSingleByChannel(OutHitResultclimbable, StartPosition, EndPosition, ECollisionChannel::ECC_GameTraceChannel2, IgnoreSelf);
+	bool isHitEnemy = GetWorld()->LineTraceSingleByChannel(OutHitResultEnemy, StartPosition, EndPosition, ECollisionChannel::ECC_GameTraceChannel6, IgnoreSelf);
+	bool isHitRaycastBlocker = GetWorld()->LineTraceSingleByChannel(OutHitResultRaycastBlocker, StartPosition, EndPosition, ECollisionChannel::ECC_GameTraceChannel10, IgnoreSelf);
+	bool isSpawnedIceHit = GetWorld()->LineTraceSingleByChannel(OutHitResultSpawnedIceDestructable, StartPosition, EndPosition, ECollisionChannel::ECC_GameTraceChannel11, IgnoreSelf);
+	
+	if (isHitWalldestructable == true && isHitRaycastBlocker == false && isSpawnedIceHit == false)
+	{
+		SpawnIceDestructable(FVector(OutHitResultdestructable.Location), FRotator(GetActorRotation().Pitch -270, GetActorRotation().Yaw +180,0));
+	}
+	if (isHitWalldestructable == true && isHitRaycastBlocker == false)
+	{
+		SpawnIceDestructablePlayer2(FVector(OutHitResultdestructable.Location), FRotator(GetActorRotation().Pitch - 270, GetActorRotation().Yaw + 180, 0));
+	}
+	if (isHitWallclimbable == true && isHitRaycastBlocker == false)
+	{
+	    SpawnIceClimbable(FVector(OutHitResultclimbable.Location), FRotator(GetActorRotation().Pitch + 180, GetActorRotation().Yaw + 270, 0));
+	}
+	if (isHitEnemy == true && isHitRaycastBlocker == false)
+	{
+		SpawnIceFreezeEnemy(FVector(OutHitResultEnemy.Location), FRotator(GetActorRotation()), OutHitResultEnemy.GetActor());
+		EnemyRef = Cast<ALego_Enemy_Skeleton>(OutHitResultEnemy.GetActor());
+		EnemyRef->Freeze();
+		EnemyRef->isFrozen = true;
+	}
+}
