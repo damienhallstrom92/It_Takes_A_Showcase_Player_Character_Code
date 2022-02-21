@@ -1,0 +1,115 @@
+#pragma once
+
+#include "Lego_Enemy_Skeleton.h"
+#include "DrawDebugHelpers.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "Camera/CameraComponent.h"
+#include "CoreMinimal.h"
+#include "GameFramework/Character.h"
+#include "playercharacter.generated.h"
+
+UCLASS()
+class DAMIENH_LEVEL_DESIGN_API Aplayercharacter : public ACharacter
+{
+	GENERATED_BODY()
+
+public:
+
+	Aplayercharacter();
+
+	//Enemy reference
+	ALego_Enemy_Skeleton* EnemyRef;
+
+	//player variables
+	UPROPERTY(BlueprintReadWrite) int32 Health;
+	UPROPERTY(BlueprintReadWrite) bool isAiming;
+	UPROPERTY(BlueprintReadWrite) bool isfalling;
+	bool bBlockRaycast;
+	bool candoublejump;
+	bool jumpOnce;
+	bool doublejumpOnce;
+	bool stopshootTimerDoOnce;
+	bool isHoldingShootButton;
+	bool rollDoOnce;
+	bool isCollisionDetected;
+	float shootRange = 29000;
+	float defaultmovementspeed = 1250;
+	float sprintmovementspeed = 2250;
+
+	//sphere trace for camera collision detection
+	FCollisionShape camSphereTrace = FCollisionShape::MakeSphere(350.0f);
+	
+	//custom blueprint events
+	UFUNCTION(BlueprintImplementableEvent) void isShooting();
+	UFUNCTION(BlueprintImplementableEvent) void isNotShooting();
+	UFUNCTION(BlueprintImplementableEvent) void SpawnIceDestructable(FVector spawnloc, FRotator spawnrot);
+	UFUNCTION(BlueprintImplementableEvent) void SpawnIceDestructablePlayer2(FVector spawnloc, FRotator spawnrot);
+	UFUNCTION(BlueprintImplementableEvent) void SpawnIceClimbable(FVector spawnloc, FRotator spawnrot);
+	UFUNCTION(BlueprintImplementableEvent) void SpawnIceFreezeEnemy(FVector spawnloc, FRotator spawnrot, AActor* target);
+	UFUNCTION(BlueprintImplementableEvent) void SpawnProjectile();
+	UFUNCTION(BlueprintImplementableEvent) void isAimingEvent();
+	UFUNCTION(BlueprintImplementableEvent) void isNotAimingEvent();
+	UFUNCTION(BlueprintImplementableEvent) void isJumping();
+
+	//player camera variables
+	float targetlengthDefaultspringarmloc = 800.0f;
+	float targetlengthAimspringarmloc = 600.0f;
+	FVector vectorDefaultspringarmloc = FVector(0,0,150);
+	FVector vectorAimspringarmloc = FVector(-75,0,150);
+	float maxcollisionzoomloc = 100.0f;
+	float cameracollisioninterpSpeed;
+
+	//animation montage setup
+	UAnimInstance* AnimMontage;
+
+	//timers
+	FTimerHandle customticktimer;
+	FTimerHandle gravitytimer;
+	FTimerHandle stopshootAnimtimer;
+	FTimerHandle projectileTimer;
+	FTimerHandle BlockRaycastTimer;
+
+protected:
+
+	virtual void BeginPlay() override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera") USpringArmComponent* springarm;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera") UCameraComponent* playercamera;
+	UPROPERTY(EditAnywhere, Category = "Montage") UAnimMontage* jumpmontage;
+	UPROPERTY(EditAnywhere, Category = "Montage") UAnimMontage* doublejumpmontage;
+	UPROPERTY(EditAnywhere, Category = "Montage") UAnimMontage* shootmontage;
+	UPROPERTY(EditAnywhere, Category = "Montage") UAnimMontage* landrollmontage;
+
+	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	
+	//player input
+	void moveforward(float moveF);
+	void movebackward(float moveB);
+	void moveleft(float moveL);
+	void moveright(float moveR);
+	void lookhorizontal(float lookH);
+	void lookvertical(float lookV);
+	void onjump();
+	void onjumprelease();
+	void onDoublejump();
+	void shoot();
+	void stopshoot();
+	void stopshootTimerEnd();
+	void projectileTimerEnd();
+	void blockraycastTimerEnd();
+	void aim();
+	void stopaim();
+	void sprint();
+	void stopsprint();
+
+	//raycast
+	void raycastshoot();
+
+	//sphere trace collision detection function
+	void cameraCollisionDetection();
+
+	//timers
+	void customtick();
+	void increasegravity();
+};
